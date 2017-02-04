@@ -23,6 +23,7 @@ var (
 	userAgent          string
 	displayHelp        bool
 	displayVersion     bool
+	bufSize	           int
 	insecureSkipVerify bool
 	red                = color.New(color.FgRed).SprintFunc()
 	magenta            = color.New(color.FgMagenta).SprintFunc()
@@ -40,10 +41,11 @@ func init() {
 	flag.BoolVar(&insecureSkipVerify, "insecureSkipVerify", false, "Skip TLS certificate verification")
 	flag.BoolVar(&displayHelp, "help", false, "Display help information about wsd")
 	flag.BoolVar(&displayVersion, "version", false, "Display version number")
+	flag.IntVar(&bufSize, "bufSize", 1024, "Inbound messages buffer size")
 }
 
 func inLoop(ws *websocket.Conn, errors chan<- error, in chan<- []byte) {
-	var msg = make([]byte, 1024)
+	var msg = make([]byte, bufSize)
 
 	for {
 		var n int
