@@ -33,6 +33,8 @@ Usage of ./wsd:
       origin of WebSocket client (default "http://localhost/")
   -protocol string
       WebSocket subprotocol
+  -raw
+      Don't format the messages received and don't launch an interactive shell
   -userAgent string
       "User-Agent" header
   -url string

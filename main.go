@@ -23,8 +23,9 @@ var (
 	userAgent          string
 	displayHelp        bool
 	displayVersion     bool
-	bufSize	           int
+	bufSize            int
 	insecureSkipVerify bool
+	raw                bool
 	red                = color.New(color.FgRed).SprintFunc()
 	magenta            = color.New(color.FgMagenta).SprintFunc()
 	green              = color.New(color.FgGreen).SprintFunc()
@@ -41,6 +42,7 @@ func init() {
 	flag.BoolVar(&insecureSkipVerify, "insecureSkipVerify", false, "Skip TLS certificate verification")
 	flag.BoolVar(&displayHelp, "help", false, "Display help information about wsd")
 	flag.BoolVar(&displayVersion, "version", false, "Display version number")
+	flag.BoolVar(&raw, "raw", false, "Don't format the messages received and don't launch an interactive shell")
 	flag.IntVar(&bufSize, "bufSize", 1024, "Inbound messages buffer size")
 }
 
@@ -65,9 +67,11 @@ func inLoop(ws *websocket.Conn, errors chan<- error, in chan<- []byte) {
 func printErrors(errors <-chan error) {
 	for err := range errors {
 		if err == io.EOF {
-			fmt.Printf("\r✝ %v - connection closed by remote\n", magenta(err))
+			if !raw {
+				fmt.Printf("\r✝ %v - connection closed by remote\n", magenta(err))
+			}
 			os.Exit(0)
-		} else {
+		} else if !raw {
 			fmt.Printf("\rerr %v\n> ", red(err))
 		}
 	}
@@ -75,7 +79,11 @@ func printErrors(errors <-chan error) {
 
 func printReceivedMessages(in <-chan []byte) {
 	for msg := range in {
-		fmt.Printf("\r< %s\n> ", cyan(string(msg)))
+		if raw {
+			fmt.Printf("%s\n", string(msg))
+		} else {
+			fmt.Printf("\r< %s\n> ", cyan(string(msg)))
+		}
 	}
 }
 
@@ -121,10 +129,12 @@ func main() {
 
 	ws, err := dial(url, protocol, origin)
 
-	if protocol != "" {
-		fmt.Printf("connecting to %s via %s from %s...\n", yellow(url), yellow(protocol), yellow(origin))
-	} else {
-		fmt.Printf("connecting to %s from %s...\n", yellow(url), yellow(origin))
+	if !raw {
+		if protocol != "" {
+			fmt.Printf("connecting to %s via %s from %s...\n", yellow(url), yellow(protocol), yellow(origin))
+		} else {
+			fmt.Printf("connecting to %s from %s...\n", yellow(url), yellow(origin))
+		}
 	}
 
 	defer ws.Close()
@@ -133,30 +143,37 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("successfully connected to %s\n\n", green(url))
+	if !raw {
+		fmt.Printf("successfully connected to %s\n\n", green(url))
+	}
 
-	wg.Add(3)
+	in := make(chan []byte)
+	wg.Add(1)
+	defer close(in)
 
 	errors := make(chan error)
-	in := make(chan []byte)
-	out := make(chan []byte)
-
+	wg.Add(1)
 	defer close(errors)
-	defer close(out)
-	defer close(in)
+
+	if !raw {
+		out := make(chan []byte)
+		wg.Add(1)
+		defer close(out)
+
+		go outLoop(ws, out, errors)
+
+		scanner := bufio.NewScanner(os.Stdin)
+
+		fmt.Print("> ")
+		for scanner.Scan() {
+			out <- []byte(scanner.Text())
+			fmt.Print("> ")
+		}
+	}
 
 	go inLoop(ws, errors, in)
 	go printReceivedMessages(in)
 	go printErrors(errors)
-	go outLoop(ws, out, errors)
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	fmt.Print("> ")
-	for scanner.Scan() {
-		out <- []byte(scanner.Text())
-		fmt.Print("> ")
-	}
 
 	wg.Wait()
 }
