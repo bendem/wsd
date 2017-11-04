@@ -78,7 +78,7 @@ func printErrors(errors <-chan error) {
 func printReceivedMessages(in <-chan []byte) {
 	for msg := range in {
 		if raw {
-			fmt.Printf("%s\n", string(msg))
+			fmt.Printf("%s", string(msg))
 		} else {
 			fmt.Printf("\r< %s\n> ", cyan(string(msg)))
 		}
