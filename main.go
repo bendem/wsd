@@ -50,10 +50,7 @@ func inLoop(ws *websocket.Conn, errors chan<- error, in chan<- []byte) {
 	var msg = make([]byte, bufSize)
 
 	for {
-		var n int
-		var err error
-
-		n, err = ws.Read(msg)
+		n, err := ws.Read(msg)
 
 		if err != nil {
 			errors <- err
@@ -67,12 +64,13 @@ func inLoop(ws *websocket.Conn, errors chan<- error, in chan<- []byte) {
 func printErrors(errors <-chan error) {
 	for err := range errors {
 		if err == io.EOF {
-			if !raw {
-				fmt.Printf("\r✝ %v - connection closed by remote\n", magenta(err))
-			}
+			fmt.Fprintf(os.Stderr, "\r✝ %v - connection closed by remote\n", magenta(err))
 			os.Exit(0)
-		} else if !raw {
-			fmt.Printf("\rerr %v\n> ", red(err))
+		} else {
+			fmt.Fprintf(os.Stderr, "\rerr %v\n", red(err))
+			if !raw {
+				fmt.Printf("> ")
+			}
 		}
 	}
 }
