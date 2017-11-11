@@ -46,52 +46,52 @@ func init() {
 	flag.IntVar(&bufSize, "bufSize", 1024, "Inbound messages buffer size")
 }
 
-func inLoop(ws *websocket.Conn, errors chan<- error, in chan<- []byte) {
-	var msg = make([]byte, bufSize)
+func inLoop(ws *websocket.Conn) {
+	msg := make([]byte, bufSize)
 
 	for {
 		n, err := ws.Read(msg)
 
 		if err != nil {
-			errors <- err
+			printError(err)
 			continue
 		}
 
-		in <- msg[:n]
+		printReceivedMessage(msg[:n])
 	}
+
+	wg.Done()
 }
 
-func printErrors(errors <-chan error) {
-	for err := range errors {
-		if err == io.EOF {
-			fmt.Fprintf(os.Stderr, "\r✝ %v - connection closed by remote\n", magenta(err))
-			os.Exit(0)
-		} else {
-			fmt.Fprintf(os.Stderr, "\rerr %v\n", red(err))
-			if !raw {
-				fmt.Printf("> ")
-			}
+func printError(err error) {
+	if err == io.EOF {
+		fmt.Fprintf(os.Stderr, "\r✝ %v - connection closed by remote\n", magenta(err))
+		os.Exit(0)
+	} else {
+		fmt.Fprintf(os.Stderr, "\rerr %v\n", red(err))
+		if !raw {
+			fmt.Printf("> ")
 		}
 	}
 }
 
-func printReceivedMessages(in <-chan []byte) {
-	for msg := range in {
-		if raw {
-			fmt.Printf("%s", string(msg))
-		} else {
-			fmt.Printf("\r< %s\n> ", cyan(string(msg)))
-		}
+func printReceivedMessage(msg []byte) {
+	if raw {
+		os.Stdout.Write(msg)
+	} else {
+		fmt.Printf("\r< %s\n> ", cyan(string(msg)))
 	}
 }
 
-func outLoop(ws *websocket.Conn, out <-chan []byte, errors chan<- error) {
+func outLoop(ws *websocket.Conn, out <-chan []byte) {
 	for msg := range out {
 		_, err := ws.Write(msg)
 		if err != nil {
-			errors <- err
+			printError(err)
 		}
 	}
+
+	wg.Done()
 }
 
 func dial(url, protocol, origin string) (ws *websocket.Conn, err error) {
@@ -145,20 +145,12 @@ func main() {
 		fmt.Printf("successfully connected to %s\n\n", green(url))
 	}
 
-	in := make(chan []byte)
-	wg.Add(1)
-	defer close(in)
-
-	errors := make(chan error)
-	wg.Add(1)
-	defer close(errors)
-
 	if !raw {
 		out := make(chan []byte)
-		wg.Add(1)
 		defer close(out)
 
-		go outLoop(ws, out, errors)
+		wg.Add(1)
+		go outLoop(ws, out)
 
 		scanner := bufio.NewScanner(os.Stdin)
 
@@ -169,9 +161,8 @@ func main() {
 		}
 	}
 
-	go inLoop(ws, errors, in)
-	go printReceivedMessages(in)
-	go printErrors(errors)
+	wg.Add(1)
+	go inLoop(ws)
 
 	wg.Wait()
 }
